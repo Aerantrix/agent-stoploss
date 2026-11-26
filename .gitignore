@@ -10,3 +10,4 @@ node_modules/
 .ruff_cache/
 .coverage
 htmlcov/
+research_logs/

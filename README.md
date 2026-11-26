@@ -30,6 +30,34 @@ pip install agent-stoploss
 
 Python 3.10+. One dependency (PyYAML). Apache-2.0.
 
+## Try it
+
+The demo needs no API key and no network. A scripted, stubborn agent makes
+four runs, one healthy and three stuck on a broken tool: first in shadow mode,
+then the replay report on what was recorded, then in enforce mode.
+
+```
+git clone https://github.com/Aerantrix/agent-stoploss
+cd agent-stoploss
+python -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/python examples/offline_demo.py ./stoploss_logs
+.venv/bin/agent-stoploss dashboard ./stoploss_logs
+```
+
+With a real model, a few cents on Claude Haiku 5.5. The examples give the agent
+a tool that always fails; run them in `shadow` or `enforce` and compare:
+
+```
+.venv/bin/pip install -e ".[claude-agent-sdk]" anthropic
+export ANTHROPIC_API_KEY=...
+export STOPLOSS_EXAMPLE_MODEL=claude-haiku-5-5      # the default is claude-opus-5-5
+.venv/bin/python examples/anthropic_loop.py enforce
+.venv/bin/python examples/agent_sdk.py enforce
+.venv/bin/agent-stoploss replay ./stoploss_logs
+```
+
+On Windows the commands are under `.venv\Scripts\` instead of `.venv/bin/`.
+
 ## Why another spend guard?
 
 Most guards count: steps, tokens, dollars. agent-stoploss also reads what the
@@ -215,6 +243,26 @@ of the 444 failing runs and saves 99% of the tokens they spent beyond the
 minimum needed to see the failure. It would have stopped 6 of the 216 healthy
 runs, all with the local 7B model; 8 failing runs that spent above that minimum
 got through. The test suite reproduces these numbers from the study's records.
+
+## Development
+
+```
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m pytest
+.venv/bin/ruff check src tests examples
+```
+
+Two tests are skipped without the Agent Fuel study: they replay its 660 recorded
+runs and check that the library stops each one where the study's own replay
+did. With a checkout of the study they run too, and the same checkout gives
+the dashboard the study's runs to explore:
+
+```
+git clone https://github.com/Aerantrix/Agent-Fuel ../agent-fuel
+AGENT_FUEL_REPO=../agent-fuel .venv/bin/python -m pytest
+AGENT_FUEL_REPO=../agent-fuel .venv/bin/python tests/ui/make_research_logs.py research_logs
+.venv/bin/agent-stoploss dashboard research_logs
+```
 
 ## License
 
