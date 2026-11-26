@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent-stoploss</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ef;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series: #2a78d6;
+  --series-soft: rgba(42,120,214,0.12);
+  --good: #0ca30c;
+  --good-text: #006300;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --focus: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series: #3987e5; --series-soft: rgba(57,135,229,0.16);
+    --good-text: #0ca30c; --focus: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series: #3987e5; --series-soft: rgba(57,135,229,0.16);
+  --good-text: #0ca30c; --focus: #3987e5;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.muted { color: var(--muted); }
+.ink2 { color: var(--ink-2); }
+
+header {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+header .src { color: var(--ink-2); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.btn {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 6px;
+  padding: 5px 11px; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--series); border-color: var(--series); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.small { padding: 2px 8px; font-size: 12.5px; }
+
+.layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: calc(100vh - 53px); }
+aside {
+  background: var(--surface); border-right: 1px solid var(--border);
+  padding: 16px 18px 40px; overflow-y: auto; max-height: calc(100vh - 53px); position: sticky; top: 0;
+}
+main { padding: 18px 24px 60px; min-width: 0; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--border); }
+  main { padding: 16px; }
+}
+
+aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); margin: 0 0 10px; }
+.state { font-size: 12.5px; margin: -4px 0 12px; }
+.state.dirty { color: var(--ink); }
+fieldset { border: 0; border-top: 1px solid var(--border); margin: 0; padding: 12px 0 10px; }
+legend { padding: 0; font-weight: 600; display: flex; align-items: center; gap: 8px; width: 100%; }
+legend .hint { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: auto; }
+.row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.row label { flex: 1; color: var(--ink-2); }
+.row input[type=number] { width: 96px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px; background: var(--page); text-align: right; }
+.row input[type=range] { flex: 1.3; accent-color: var(--series); }
+.row output { width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
+input[type=text].wide, textarea.wide { width: 100%; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--page); }
+textarea.wide { resize: vertical; min-height: 44px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 3px 10px; cursor: pointer; }
+.seg button[aria-pressed=true] { background: var(--ink); color: var(--surface); }
+.switch { accent-color: var(--series); width: 15px; height: 15px; }
+.preview { font-size: 12.5px; background: var(--surface-2); border-radius: 5px; padding: 6px 8px; margin-top: 6px; color: var(--ink-2); }
+.tools-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tools-table th { font-weight: 500; color: var(--muted); text-align: center; padding: 2px 3px; }
+.tools-table th:first-child { text-align: left; }
+.tools-table td { padding: 3px; text-align: center; border-top: 1px solid var(--border); }
+.tools-table td:first-child { text-align: left; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tools-table input[type=number] { width: 46px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 4px; background: var(--page); }
+.problems { background: color-mix(in srgb, var(--critical) 12%, var(--surface)); border: 1px solid var(--critical); border-radius: 6px; padding: 8px 10px; margin: 0 0 12px; font-size: 12.5px; }
+.problems ul { margin: 4px 0 0; padding-left: 18px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+nav.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+nav.tabs button { border: 0; background: none; padding: 8px 14px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+nav.tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+nav.tabs button:disabled { color: var(--muted); cursor: default; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.tile .label { color: var(--ink-2); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.tile .value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 2px; }
+.tile .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.tile .base { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.good { background: var(--good); }
+.dot.critical { background: var(--critical); }
+.dot.warning { background: var(--warning); }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
+.card h3 { font-size: 14px; margin: 0 0 10px; font-weight: 600; }
+.card h3 .muted { font-weight: 400; font-size: 12.5px; margin-left: 6px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
+.grid2 .card { margin-bottom: 0; }
+
+.bars { display: grid; grid-template-columns: max-content 1fr max-content; gap: 6px 10px; align-items: center; }
+.bars .name { color: var(--ink-2); font-size: 13px; }
+.bars .track { height: 14px; position: relative; }
+.bars .bar { height: 14px; background: var(--series); border-radius: 0 4px 4px 0; min-width: 2px; }
+.bars .val { font-variant-numeric: tabular-nums; font-size: 13px; }
+
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th { text-align: left; font-weight: 500; color: var(--ink-2); padding: 6px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; position: sticky; top: 0; background: var(--surface); }
+table.data th.sortable { cursor: pointer; user-select: none; }
+table.data th.sortable:hover { color: var(--ink); }
+table.data td { padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+table.data tr.click { cursor: pointer; }
+table.data tr.click:hover td { background: var(--surface-2); }
+table.data tr.after td { color: var(--muted); }
+table.data tr.stopline td { border-top: 2px solid var(--critical); }
+.wrapx { overflow-x: auto; }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; white-space: nowrap; }
+.guess { color: var(--muted); font-style: italic; font-size: 12px; }
+.verdict { display: inline-flex; align-items: flex-start; gap: 6px; }
+.verdict .dot { margin-top: 5px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.chip { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 3px 11px; cursor: pointer; font-size: 13px; }
+.chip[aria-pressed=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.chip .n { color: var(--muted); margin-left: 4px; }
+.chip[aria-pressed=true] .n { color: inherit; opacity: 0.7; }
+.filters select, .filters input { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.empty { color: var(--muted); padding: 18px 4px; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-bottom: 14px; color: var(--ink-2); }
+.facts b { color: var(--ink); font-weight: 600; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch-line { width: 18px; height: 2px; background: var(--series); display: inline-block; }
+.swatch-dash { width: 18px; height: 0; border-top: 2px dashed var(--muted); display: inline-block; }
+
+svg text { fill: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+svg .grid { stroke: var(--grid); stroke-width: 1; }
+svg .axis { stroke: var(--axis); stroke-width: 1; }
+svg .line { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+svg .line.after { stroke: var(--muted); stroke-dasharray: 4 4; }
+svg .area { fill: var(--series-soft); }
+svg .stop { stroke: var(--critical); stroke-width: 2; stroke-dasharray: 5 3; }
+svg .stoplabel { fill: var(--ink); font-size: 12px; font-weight: 600; }
+svg .warn { fill: var(--warning); stroke: var(--surface); stroke-width: 2; }
+svg .stopdot { fill: var(--critical); stroke: var(--surface); stroke-width: 2; }
+svg .cross { stroke: var(--ink-2); stroke-width: 1; }
+svg .hit { fill: transparent; }
+
+#tip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 10px; font-size: 12.5px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); max-width: 300px;
+}
+#tip b { font-weight: 650; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 8px 14px; border-radius: 8px; font-size: 13px; display: none; z-index: 20; }
+dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--ink); padding: 0; width: min(640px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(0,0,0,0.35); }
+dialog .head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+dialog pre { margin: 0; padding: 14px 16px; max-height: 60vh; overflow: auto; background: var(--page); }
+dialog .foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <h1>agent-stoploss</h1>
+  <div class="src" id="src">loading…</div>
+  <button class="btn small" id="reload" title="Read the logs again">Reload logs</button>
+  <button class="btn small" id="theme" title="Light, dark or system theme">Theme: auto</button>
+</header>
+<div class="layout">
+  <aside>
+    <h2>Thresholds</h2>
+    <div class="state" id="state">Same as the config file.</div>
+    <div id="problems"></div>
+    <div id="controls"></div>
+    <div class="actions">
+      <button class="btn primary" id="export">Export stoploss.yaml</button>
+      <button class="btn" id="reset">Reset</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:14px">
+      This page changes nothing in a running agent. Export the file, commit it with your agent,
+      and deploy it like any other change.
+    </p>
+  </aside>
+  <main>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="summary" aria-selected="true">Summary</button>
+      <button role="tab" data-tab="runs" aria-selected="false">Runs</button>
+      <button role="tab" data-tab="run" aria-selected="false" disabled>Run</button>
+    </nav>
+    <section id="tab-summary"></section>
+    <section id="tab-runs" hidden></section>
+    <section id="tab-run" hidden></section>
+  </main>
+</div>
+<div id="tip" role="tooltip"></div>
+<div class="toast" id="toast"></div>
+<dialog id="exportDlg">
+  <div class="head"><b>stoploss.yaml</b><button class="btn small" id="dlgClose">Close</button></div>
+  <pre class="mono" id="yamlText"></pre>
+  <div class="foot">
+    <button class="btn" id="copyYaml">Copy</button>
+    <button class="btn primary" id="saveYaml">Download</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------- helpers
+const $ = (id) => document.getElementById(id);
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") n.className = v;
+    else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid === null || kid === undefined || kid === false) continue;
+    n.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return n;
+}
+const SVGNS = "http://www.w3.org/2000/svg";
+function sv(tag, attrs) {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "text") n.textContent = v; else n.setAttribute(k, v);
+  }
+  return n;
+}
+const fmt = (n) => (n === null || n === undefined) ? "–" : Number(n).toLocaleString("en-US");
+const money = (x) => x === null || x === undefined ? "–" : (x >= 0.01 || x === 0 ? "$" + x.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}) : "$" + x.toFixed(4));
+const pct = (a, b) => b ? Math.round(100 * a / b) + "%" : "–";
+const clone = (x) => JSON.parse(JSON.stringify(x));
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const when = (ts) => ts ? new Date(ts * 1000).toLocaleString(undefined, {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"}) : "–";
+
+const NAMES = {
+  run_budget: "Run budget",
+  loop_call: "Same call repeated",
+  loop_result: "Same result repeated",
+  circuit_breaker: "Tool keeps failing",
+  terminal_error: "Error retrying cannot fix",
+  pricing: "Unpriced model",
+};
+const mech = (m) => NAMES[m] || m || "–";
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", 2200);
+}
+
+const tip = $("tip");
+function showTip(evt, nodes) {
+  tip.replaceChildren(...nodes);
+  tip.style.display = "block";
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  if (x + w > innerWidth - 8) x = evt.clientX - w - pad;
+  if (y + h > innerHeight - 8) y = evt.clientY - h - pad;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+async function api(path, body) {
+  const opts = body === undefined ? {} :
+    {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)};
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(data.error || r.status); e.data = data; e.status = r.status; throw e; }
+  return data;
+}
+
+// ---------------------------------------------------------------- theme
+const THEMES = ["auto", "light", "dark"];
+let theme = "auto";
+try { theme = localStorage.getItem("stoploss-theme") || "auto"; } catch (e) {}
+function applyTheme() {
+  if (theme === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", theme);
+  $("theme").textContent = "Theme: " + theme;
+}
+$("theme").onclick = () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  try { localStorage.setItem("stoploss-theme", theme); } catch (e) {}
+  applyTheme();
+};
+applyTheme();
+
+// ---------------------------------------------------------------- state
+const S = {
+  meta: null, fileCfg: null, cfg: null,
+  base: null, report: null, problems: null,
+  tab: "summary", runId: null, detail: null,
+  filter: "all", agent: "", search: "", sort: {key: "ts", dir: -1}, limit: 200,
+};
+
+function getPath(obj, path) { return path.split(".").reduce((o, k) => o == null ? undefined : o[k], obj); }
+function setPath(obj, path, value) {
+  const ks = path.split("."); let o = obj;
+  for (const k of ks.slice(0, -1)) { if (o[k] == null || typeof o[k] !== "object") o[k] = {}; o = o[k]; }
+  o[ks.at(-1)] = value;
+}
+
+// ---------------------------------------------------------------- controls
+function numberRow(label, path, {min = 0, step = 1, nullable = false, hint} = {}) {
+  const v = getPath(S.cfg, path);
+  const input = el("input", {type: "number", min, step, value: v ?? "", "aria-label": label,
+    placeholder: nullable ? "off" : null});
+  input.addEventListener("input", () => {
+    const raw = input.value.trim();
+    setPath(S.cfg, path, raw === "" ? (nullable ? null : getPath(S.fileCfg, path)) : Number(raw));
+    changed();
+  });
+  return el("div", {class: "row", title: hint}, el("label", {text: label}), input);
+}
+function rangeRow(label, path, min, max, onInput) {
+  const v = getPath(S.cfg, path);
+  const out = el("output", {text: v});
+  const input = el("input", {type: "range", min, max, step: 1, value: v, "aria-label": label});
+  input.addEventListener("input", () => {
+    out.textContent = input.value;
+    setPath(S.cfg, path, Number(input.value));
+    if (onInput) onInput(Number(input.value));
+    changed();
+  });
+  return el("div", {class: "row"}, el("label", {text: label}), input, out);
+}
+function enabledToggle(path) {
+  const box = el("input", {type: "checkbox", class: "switch", "aria-label": "enabled"});
+  box.checked = getPath(S.cfg, path) !== false;
+  box.addEventListener("change", () => { setPath(S.cfg, path, box.checked); changed(); buildControls(); });
+  return box;
+}
+
+function buildControls() {
+  const c = S.cfg;
+  const root = $("controls");
+  const parts = [];
+
+  // mode
+  const seg = el("div", {class: "seg", role: "group", "aria-label": "Mode"});
+  for (const m of ["shadow", "enforce"]) {
+    seg.append(el("button", {text: m, "aria-pressed": String(c.mode === m),
+      onclick: () => { c.mode = m; changed(); buildControls(); }}));
+  }
+  parts.push(el("fieldset", {}, el("legend", {}, "Mode", el("span", {class: "hint", text: "for the exported file"})),
+    el("div", {class: "row"}, seg),
+    el("div", {class: "muted", style: "font-size:12px",
+      text: c.mode === "shadow" ? "Record only. Start here." : "Warn the agent, stop the run."})));
+
+  // run budget
+  const sugg = S.report && S.report.suggested_max_tokens;
+  parts.push(el("fieldset", {},
+    el("legend", {}, "Run budget", el("span", {class: "hint", text: "empty = off"})),
+    numberRow("Max tokens per run", "run_budget.max_tokens", {min: 1, step: 1000, nullable: true}),
+    numberRow("Max cost per run, $", "run_budget.max_cost_usd", {min: 0, step: 0.1, nullable: true}),
+    sugg ? el("div", {class: "row"}, el("button", {class: "btn small", text: "Use " + fmt(sugg) + " tokens",
+      title: "1.5 × the most expensive run labelled ok",
+      onclick: () => { setPath(c, "run_budget.max_tokens", sugg); changed(); buildControls(); }})) : null));
+
+  // loop detector
+  const loopOn = c.loop_detector.enabled !== false;
+  parts.push(el("fieldset", {},
+    el("legend", {}, enabledToggle("loop_detector.enabled"), "Loop detector"),
+    loopOn ? rangeRow("Same call or result, times", "loop_detector.threshold", 2, 10) : null));
+
+  // circuit breaker
+  const cbOn = c.circuit_breaker.enabled !== false;
+  let failRow;
+  const winRow = cbOn ? rangeRow("Window, last calls", "circuit_breaker.window", 1, 20, (w) => {
+    if (c.circuit_breaker.max_failures > w) { c.circuit_breaker.max_failures = w; }
+    const r = failRow.querySelector("input"); r.max = w; r.value = c.circuit_breaker.max_failures;
+    failRow.querySelector("output").textContent = c.circuit_breaker.max_failures;
+  }) : null;
+  if (cbOn) {
+    failRow = rangeRow("Failures in window", "circuit_breaker.max_failures", 1, c.circuit_breaker.window);
+  }
+  parts.push(el("fieldset", {},
+    el("legend", {}, enabledToggle("circuit_breaker.enabled"), "Circuit breaker"),
+    winRow, failRow || null,
+    cbOn ? numberRow("Pause, seconds", "circuit_breaker.cooldown_seconds", {min: 0, step: 10}) : null));
+
+  // error classifier
+  const ecOn = c.error_classifier.enabled !== false;
+  const statuses = el("input", {type: "text", class: "wide mono", value: (c.error_classifier.terminal_statuses || []).join(", "),
+    "aria-label": "Terminal HTTP statuses"});
+  statuses.addEventListener("input", () => {
+    const list = statuses.value.split(/[\s,]+/).filter(Boolean).map(Number);
+    if (list.every((n) => Number.isInteger(n))) { c.error_classifier.terminal_statuses = list; changed(); }
+  });
+  parts.push(el("fieldset", {},
+    el("legend", {}, enabledToggle("error_classifier.enabled"), "Error classifier"),
+    ecOn ? el("div", {}, el("div", {class: "muted", style: "font-size:12px;margin:6px 0 4px",
+      text: "HTTP statuses where retrying cannot help:"}), statuses) : null));
+
+  // tools
+  const tools = Object.keys(S.meta.tools || {});
+  if (tools.length) {
+    const tbody = el("tbody");
+    for (const t of tools) {
+      // Look the rules up on every change: tidyTool() drops empty entries,
+      // so an object captured here could be detached from the config.
+      const section = (name) => {
+        const rules = (S.cfg.tools[t] = S.cfg.tools[t] || {});
+        return (rules[name] = rules[name] || {});
+      };
+      const current = (S.cfg.tools[t] || {});
+      const cell = (name) => {
+        const box = el("input", {type: "checkbox", "aria-label": name + " for " + t});
+        box.checked = !(current[name] && current[name].enabled === false);
+        box.addEventListener("change", () => {
+          const sec = section(name);
+          if (box.checked) delete sec.enabled; else sec.enabled = false;
+          tidyTool(t); changed();
+        });
+        return el("td", {}, box);
+      };
+      const thr = el("input", {type: "number", min: 2, step: 1, placeholder: "–",
+        value: current.loop_detector && current.loop_detector.threshold || "", "aria-label": "loop threshold for " + t});
+      thr.addEventListener("input", () => {
+        const sec = section("loop_detector");
+        if (thr.value === "") delete sec.threshold; else sec.threshold = Number(thr.value);
+        tidyTool(t); changed();
+      });
+      tbody.append(el("tr", {}, el("td", {class: "mono", title: t + " · " + fmt(S.meta.tools[t]) + " calls", text: t}),
+        cell("loop_detector"), el("td", {}, thr), cell("circuit_breaker"), cell("error_classifier")));
+      tidyTool(t);
+    }
+    parts.push(el("fieldset", {},
+      el("legend", {}, "Per tool", el("span", {class: "hint", text: "uncheck to exempt"})),
+      el("table", {class: "tools-table"},
+        el("thead", {}, el("tr", {}, el("th", {text: "tool"}), el("th", {text: "loop"}), el("th", {text: "times"}),
+          el("th", {text: "breaker"}), el("th", {text: "errors"}))), tbody)));
+  }
+
+  // notice
+  const notice = el("textarea", {class: "wide", rows: 2, "aria-label": "Notice text"});
+  notice.value = c.notice;
+  const prev = el("div", {class: "preview"});
+  const renderPrev = () => prev.textContent = "Agent sees: " + notice.value.replaceAll("{reason}", "analytics failed in 3 of its last 5 calls");
+  renderPrev();
+  notice.addEventListener("input", () => { c.notice = notice.value; renderPrev(); changed(); });
+  parts.push(el("fieldset", {}, el("legend", {}, "Notice to the agent", el("span", {class: "hint", text: "enforce only"})),
+    notice, prev));
+
+  parts.push(el("fieldset", {}, el("legend", {}, "Report"),
+    numberRow("Minimum spend: steps", "minimum_steps", {min: 0, step: 1,
+      hint: "Spend up to the end of this step counts as what any run of the task costs"})));
+
+  root.replaceChildren(...parts);
+}
+
+function tidyTool(t) {
+  const r = S.cfg.tools[t];
+  if (!r) return;
+  for (const k of Object.keys(r)) if (r[k] && !Object.keys(r[k]).length) delete r[k];
+  if (!Object.keys(r).length) delete S.cfg.tools[t];
+}
+
+function normalisedCfg() {
+  const c = clone(S.cfg);
+  for (const t of Object.keys(c.tools || {})) {
+    for (const k of Object.keys(c.tools[t])) if (!Object.keys(c.tools[t][k]).length) delete c.tools[t][k];
+    if (!Object.keys(c.tools[t]).length) delete c.tools[t];
+  }
+  return c;
+}
+
+let timer = null;
+function changed() {
+  const dirty = !same(normalisedCfg(), S.fileCfg);
+  const st = $("state");
+  st.textContent = dirty ? "Changed — numbers below use these thresholds." : "Same as the config file.";
+  st.classList.toggle("dirty", dirty);
+  clearTimeout(timer);
+  timer = setTimeout(recompute, 180);
+}
+
+async function recompute() {
+  const cfg = normalisedCfg();
+  try {
+    S.report = await api("/api/replay", {config: cfg});
+    S.problems = null;
+  } catch (e) {
+    if (e.status === 422) { S.problems = e.data.problems; } else { toast("Error: " + e.message); }
+  }
+  renderProblems();
+  render();
+  if (S.tab === "run" && S.runId) loadRun(S.runId);
+}
+
+function renderProblems() {
+  const box = $("problems");
+  if (!S.problems) { box.replaceChildren(); return; }
+  box.replaceChildren(el("div", {class: "problems"}, el("b", {text: "Not valid, numbers not updated:"}),
+    el("ul", {}, S.problems.map((p) => el("li", {text: p})))));
+}
+
+// ---------------------------------------------------------------- tabs
+for (const b of document.querySelectorAll("nav.tabs button")) b.onclick = () => showTab(b.dataset.tab);
+function showTab(tab) {
+  S.tab = tab;
+  for (const b of document.querySelectorAll("nav.tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+  for (const t of ["summary", "runs", "run"]) $("tab-" + t).hidden = t !== tab;
+  render();
+}
+function openRun(id) {
+  S.runId = id;
+  document.querySelector('nav.tabs button[data-tab="run"]').disabled = false;
+  showTab("run");
+  loadRun(id);
+}
+
+function render() {
+  if (!S.report) return;
+  if (S.tab === "summary") renderSummary();
+  else if (S.tab === "runs") renderRuns();
+  else if (S.tab === "run") renderRun();
+}
+
+// ---------------------------------------------------------------- summary
+function tile(label, value, sub, baseText, status) {
+  return el("div", {class: "tile"},
+    el("div", {class: "label"}, status ? el("span", {class: "dot " + status, "aria-hidden": "true"}) : null, label),
+    el("div", {class: "value", text: value}),
+    sub ? el("div", {class: "sub", text: sub}) : null,
+    baseText ? el("div", {class: "base", text: baseText}) : null);
+}
+
+function renderSummary() {
+  const t = S.report.totals, b = S.base && S.base.totals;
+  const dirty = !same(normalisedCfg(), S.fileCfg);
+  const vs = (cur, old, f = fmt) => dirty && b && cur !== old ? "config file: " + f(old) : null;
+  const shareOf = (x) => x.excess_tokens_not_ok ? x.saved_in_excess_tokens / x.excess_tokens_not_ok : null;
+  const share = shareOf(t), bshare = b ? shareOf(b) : null;
+  const pctf = (x) => x === null ? "–" : Math.round(100 * x) + "%";
+
+  const tiles = el("div", {class: "tiles"},
+    tile("Runs", fmt(t.runs), fmt(t.labelled) + " labelled by the developer"),
+    tile("Would stop", fmt(t.would_stop), pct(t.would_stop, t.runs) + " of runs", vs(t.would_stop, b && b.would_stop)),
+    tile("Would save", fmt(t.saved_tokens) + " tok", money(t.saved_cost_usd) + " of " + money(t.cost_usd),
+      vs(t.saved_tokens, b && b.saved_tokens, (x) => fmt(x) + " tok")),
+    tile("Share of waste saved", pctf(share), "excess above the minimum, runs not ok",
+      dirty && b && pctf(share) !== pctf(bshare) ? "config file: " + pctf(bshare) : null),
+    tile("Good runs it would break", fmt(t.broke_ok_runs), "runs labelled ok", vs(t.broke_ok_runs, b && b.broke_ok_runs),
+      t.broke_ok_runs ? "critical" : "good"),
+    tile("Missed", fmt(t.missed_runs), "not ok, above the minimum, not stopped", vs(t.missed_runs, b && b.missed_runs),
+      t.missed_runs ? "warning" : "good"));
+
+  // stops by mechanism: one series, direct labels
+  const entries = Object.entries(t.by_mechanism);
+  const max = Math.max(1, ...entries.map(([, n]) => n));
+  const bars = entries.length ? el("div", {class: "bars"}, entries.map(([m, n]) => {
+    const bar = el("div", {class: "bar", style: `width:${(100 * n / max).toFixed(1)}%`, tabindex: "0"});
+    const tipNodes = () => [el("b", {text: fmt(n) + " runs"}), document.createTextNode(" · " + mech(m) + " · " + pct(n, t.would_stop) + " of stops")];
+    bar.addEventListener("pointermove", (e) => showTip(e, tipNodes()));
+    bar.addEventListener("pointerleave", hideTip);
+    bar.addEventListener("focus", () => { const r = bar.getBoundingClientRect(); showTip({clientX: r.right, clientY: r.top}, tipNodes()); });
+    bar.addEventListener("blur", hideTip);
+    return [el("div", {class: "name", text: mech(m)}), el("div", {class: "track"}, bar), el("div", {class: "val", text: fmt(n)})];
+  })) : el("div", {class: "empty", text: "Nothing would be stopped with these thresholds."});
+
+  const runList = (rows, extra, empty) => rows.length ? el("div", {class: "wrapx"}, el("table", {class: "data"},
+    el("tbody", {}, rows.slice(0, 8).map((r) => el("tr", {class: "click", tabindex: "0", onclick: () => openRun(r.run_id),
+      onkeydown: (e) => { if (e.key === "Enter") openRun(r.run_id); }},
+      el("td", {class: "mono", text: r.run_id}), el("td", {class: "ink2", text: r.agent || ""}), extra(r)))))) :
+    el("div", {class: "empty", text: empty});
+
+  const broke = S.report.runs.filter((r) => r.stopped && r.outcome === "ok");
+  const missed = S.report.runs.filter((r) => !r.stopped && r.outcome !== "ok" && r.excess > 0).sort((a, b) => b.excess - a.excess);
+
+  $("tab-summary").replaceChildren(
+    tiles,
+    el("div", {class: "grid2"},
+      el("div", {class: "card"}, el("h3", {}, "Would stop, by reason", el("span", {class: "muted", text: fmt(t.would_stop) + " runs"})), bars),
+      el("div", {class: "card"}, el("h3", {}, "Good runs it would break", el("span", {class: "muted", text: "labelled ok"})),
+        runList(broke, (r) => el("td", {class: "ink2", text: "step " + r.stop_step + " · " + mech(r.mechanism)}),
+          "None. No run labelled ok would be stopped.")),
+      el("div", {class: "card"}, el("h3", {}, "Missed", el("span", {class: "muted", text: "largest excess first"})),
+        runList(missed, (r) => el("td", {class: "num", text: fmt(r.excess) + " tok above min"}),
+          "None. Every costly failed run would be stopped."))),
+    S.report.suggested_max_tokens ? el("p", {class: "ink2", style: "margin-top:18px"},
+      "Suggested run budget: ", el("b", {text: fmt(S.report.suggested_max_tokens) + " tokens"}),
+      " (1.5 × the most expensive run labelled ok). Outcomes marked as a guess come from a heuristic: label runs with ",
+      el("span", {class: "mono", text: "run.outcome()"}), " for numbers you can trust.") : null);
+}
+
+// ---------------------------------------------------------------- runs
+const FILTERS = [
+  ["all", "All", () => true],
+  ["stopped", "Would stop", (r) => r.stopped],
+  ["broke", "Would break ok", (r) => r.stopped && r.outcome === "ok"],
+  ["missed", "Missed", (r) => !r.stopped && r.outcome !== "ok" && r.excess > 0],
+  ["intact", "Not stopped", (r) => !r.stopped],
+];
+const COLS = [
+  ["ts", "Started", (r) => r.ts || 0],
+  ["run_id", "Run", (r) => r.run_id],
+  ["agent", "Agent", (r) => r.agent || ""],
+  ["outcome", "Outcome", (r) => r.outcome],
+  ["steps", "Steps", (r) => r.steps],
+  ["tokens", "Tokens", (r) => r.tokens],
+  ["cost_usd", "Cost", (r) => r.cost_usd],
+  ["mechanism", "Would stop", (r) => r.stopped ? mech(r.mechanism) : ""],
+  ["saved_tokens", "Would save", (r) => r.saved_tokens],
+];
+
+function outcomeBadge(r) {
+  const cls = r.outcome === "ok" ? "good" : r.outcome === "failed" ? "critical" : "warning";
+  return el("span", {class: "badge"}, el("span", {class: "dot " + cls, "aria-hidden": "true"}), r.outcome,
+    r.outcome_source !== "developer" ? el("span", {class: "guess", text: "guess"}) : null);
+}
+
+function renderRuns() {
+  const runs = S.report.runs;
+  const agents = [...new Set(runs.map((r) => r.agent).filter(Boolean))].sort();
+  const chips = el("div", {class: "filters"}, FILTERS.map(([key, label, f]) =>
+    el("button", {class: "chip", "aria-pressed": String(S.filter === key), onclick: () => { S.filter = key; S.limit = 200; renderRuns(); }},
+      label, el("span", {class: "n", text: fmt(runs.filter(f).length)}))));
+  if (agents.length > 1) {
+    const sel = el("select", {"aria-label": "Agent"}, el("option", {value: "", text: "All agents"}),
+      agents.map((a) => el("option", {value: a, text: a, selected: S.agent === a})));
+    sel.onchange = () => { S.agent = sel.value; renderRuns(); };
+    chips.append(sel);
+  }
+  const search = el("input", {type: "search", placeholder: "Search run id", value: S.search, "aria-label": "Search run id"});
+  search.addEventListener("input", () => { S.search = search.value; renderRunsTable(); });
+  chips.append(search);
+  const holder = el("div", {id: "runsTable"});
+  $("tab-runs").replaceChildren(chips, holder);
+  renderRunsTable();
+}
+
+function renderRunsTable() {
+  const f = FILTERS.find(([k]) => k === S.filter)[2];
+  const q = S.search.trim().toLowerCase();
+  let rows = S.report.runs.filter((r) => f(r) && (!S.agent || r.agent === S.agent) && (!q || r.run_id.toLowerCase().includes(q)));
+  const col = COLS.find(([k]) => k === S.sort.key);
+  rows.sort((a, b) => { const x = col[2](a), y = col[2](b); return (x > y ? 1 : x < y ? -1 : 0) * S.sort.dir; });
+  const total = rows.length;
+  rows = rows.slice(0, S.limit);
+  const numeric = new Set(["steps", "tokens", "cost_usd", "saved_tokens"]);
+  const head = el("tr", {}, COLS.map(([k, label]) => el("th", {class: "sortable" + (numeric.has(k) ? " num" : ""),
+    "aria-sort": S.sort.key === k ? (S.sort.dir > 0 ? "ascending" : "descending") : null,
+    onclick: () => { S.sort = {key: k, dir: S.sort.key === k ? -S.sort.dir : (numeric.has(k) || k === "ts" ? -1 : 1)}; renderRunsTable(); }},
+    label + (S.sort.key === k ? (S.sort.dir > 0 ? " ↑" : " ↓") : ""))));
+  const body = el("tbody", {}, rows.map((r) => el("tr", {class: "click", tabindex: "0",
+    onclick: () => openRun(r.run_id), onkeydown: (e) => { if (e.key === "Enter") openRun(r.run_id); }},
+    el("td", {class: "ink2", text: when(r.ts)}),
+    el("td", {class: "mono", text: r.run_id}),
+    el("td", {text: r.agent || ""}),
+    el("td", {}, outcomeBadge(r)),
+    el("td", {class: "num", text: fmt(r.steps)}),
+    el("td", {class: "num", text: fmt(r.tokens)}),
+    el("td", {class: "num", text: money(r.cost_usd)}),
+    el("td", {}, r.stopped ? el("span", {class: "verdict"}, el("span", {class: "dot critical", "aria-hidden": "true"}),
+      mech(r.mechanism) + " · step " + r.stop_step) : el("span", {class: "muted", text: "—"})),
+    el("td", {class: "num", text: r.saved_tokens ? fmt(r.saved_tokens) : "—"}))));
+  const parts = [el("div", {class: "card", style: "padding:0"}, el("div", {class: "wrapx"},
+    el("table", {class: "data"}, el("thead", {}, head), body)))];
+  if (!total) parts.push(el("div", {class: "empty", text: "No runs match."}));
+  if (total > rows.length) parts.push(el("button", {class: "btn", text: `Show more (${fmt(total - rows.length)} left)`,
+    onclick: () => { S.limit += 500; renderRunsTable(); }}));
+  $("runsTable").replaceChildren(...parts);
+}
+
+// ---------------------------------------------------------------- one run
+async function loadRun(id) {
+  try {
+    S.detail = await api("/api/run", {run_id: id, config: normalisedCfg()});
+  } catch (e) {
+    if (e.status !== 422) toast("Error: " + e.message);
+    return;
+  }
+  if (S.tab === "run") renderRun();
+}
+
+function renderRun() {
+  const d = S.detail;
+  if (!d) { $("tab-run").replaceChildren(el("div", {class: "empty", text: "Loading…"})); return; }
+  const r = d.result;
+  const start = d.events.find((e) => e.ev === "run_start") || {};
+  const facts = el("div", {class: "facts"},
+    el("span", {}, "Run ", el("b", {class: "mono", text: r.run_id})),
+    r.agent ? el("span", {}, "Agent ", el("b", {text: r.agent})) : null,
+    el("span", {}, "Started ", el("b", {text: when(start.ts)})),
+    el("span", {}, "Outcome ", outcomeBadge(r)),
+    el("span", {}, "Spent ", el("b", {text: fmt(r.tokens) + " tok · " + money(r.cost_usd)}), " in " + r.steps + " steps"),
+    r.stopped ? el("span", {}, "Would stop ", el("b", {text: "step " + r.stop_step + " · " + mech(r.mechanism)}),
+      ", saving " + fmt(r.saved_tokens) + " tok") : el("span", {}, el("b", {text: "Would not stop"})));
+
+  const stopIdx = r.stopped ? Math.max(...d.verdicts.filter((v) => v.decision === "stop").map((v) => v.i)) : Infinity;
+  const byIdx = new Map(d.verdicts.map((v) => [v.i, v]));
+
+  // the cumulative spend chart
+  const chart = spendChart(d, r, stopIdx);
+
+  const rows = d.events.map((e, i) => {
+    const v = byIdx.get(i);
+    const cls = [i > stopIdx ? "after" : "", i === stopIdx + 1 ? "stopline" : ""].join(" ").trim();
+    return el("tr", {class: cls || null},
+      el("td", {class: "num muted", text: String(i + 1)}),
+      el("td", {class: "num", text: e.step ?? ""}),
+      el("td", {class: "mono", text: e.ev}),
+      el("td", {}, describe(e)),
+      el("td", {}, v ? el("span", {class: "verdict"},
+        el("span", {class: "dot " + (v.decision === "stop" ? "critical" : "warning"), "aria-hidden": "true"}),
+        el("span", {}, el("b", {text: v.decision === "stop" ? "Stop" : "Warn"}), " · " + mech(v.mechanism) + ": " + v.reason))
+        : null));
+  });
+  const note = r.stopped ? el("p", {class: "muted", style: "font-size:12.5px"},
+    "Rows after the red line would not have happened under these thresholds.") : null;
+
+  $("tab-run").replaceChildren(facts,
+    el("div", {class: "card"}, el("h3", {}, "Tokens spent so far, by step"), chart),
+    el("div", {class: "card", style: "padding:0"}, el("div", {class: "wrapx"}, el("table", {class: "data"},
+      el("thead", {}, el("tr", {}, el("th", {class: "num", text: "#"}), el("th", {class: "num", text: "Step"}),
+        el("th", {text: "Event"}), el("th", {text: "Details"}), el("th", {text: "These thresholds"}))),
+      el("tbody", {}, rows)))), note);
+}
+
+function short(fp) { return fp ? String(fp).slice(0, 8) : ""; }
+function describe(e) {
+  const muted = (t) => el("span", {class: "muted", text: t});
+  switch (e.ev) {
+    case "run_start": return el("span", {}, (e.agent || "") + " · recorded in " + (e.mode || "?") + " · config ", el("span", {class: "mono", text: e.config_hash || "?"}));
+    case "step": return muted("agent turn begins");
+    case "model_call": return el("span", {}, (e.model || "model") + " · ",
+      el("b", {text: fmt((e.input_tokens || 0) + (e.output_tokens || 0) + (e.cache_read_tokens || 0) + (e.cache_write_tokens || 0))}), " tok",
+      e.cost_usd != null ? " · " + money(e.cost_usd) : (e.price_known === false ? muted(" · no price") : null));
+    case "tool_call": return el("span", {}, el("b", {class: "mono", text: e.tool}), " ", muted("call " + short(e.call_fp)),
+      e.args_shape && e.args_shape.keys ? muted(" · args: " + e.args_shape.keys.join(", ")) : null);
+    case "tool_result": return el("span", {}, el("b", {class: "mono", text: e.tool}), " ",
+      e.ok ? el("span", {}, el("span", {class: "dot good", "aria-hidden": "true"}), " ok ", muted("result " + short(e.result_fp)))
+           : el("span", {}, el("span", {class: "dot critical", "aria-hidden": "true"}), " failed: " + [e.error_status ? "HTTP " + e.error_status : null, e.error_type].filter(Boolean).join(" ")),
+      e.latency_ms != null ? muted(" · " + fmt(Math.round(e.latency_ms)) + " ms") : null);
+    case "verdict": return muted("recorded live: " + e.decision + " · " + mech(e.mechanism) + (e.enforced ? " (enforced)" : " (shadow)"));
+    case "notice": return el("span", {}, muted("sent to agent: "), e.text);
+    case "run_end": return el("span", {}, e.status + " · outcome " + e.outcome + (e.outcome_source === "developer" ? "" : " (guess)"));
+    default: return muted(JSON.stringify(e).slice(0, 120));
+  }
+}
+
+function spendChart(d, r, stopIdx) {
+  // cumulative tokens at the end of each step, and which steps came after the stop
+  const pts = [{step: 0, tok: 0}];
+  let cum = 0;
+  d.events.forEach((e, i) => {
+    if (e.ev !== "model_call") return;
+    cum += (e.input_tokens || 0) + (e.output_tokens || 0) + (e.cache_read_tokens || 0) + (e.cache_write_tokens || 0);
+    const last = pts.at(-1);
+    if (last.step === e.step) last.tok = cum; else pts.push({step: e.step, tok: cum});
+  });
+  if (pts.length < 2) return el("div", {class: "empty", text: "No model calls recorded."});
+  const warnSteps = [...new Set(d.verdicts.filter((v) => v.decision === "warn").map((v) => v.step))];
+
+  const W = 760, H = 240, m = {l: 64, r: 16, t: 22, b: 30};
+  const maxStep = pts.at(-1).step, maxTok = Math.max(...pts.map((p) => p.tok));
+  const niceMax = nice(maxTok);
+  const x = (s) => m.l + (W - m.l - m.r) * (s / Math.max(1, maxStep));
+  const y = (t) => H - m.b - (H - m.t - m.b) * (t / niceMax);
+  const svg = sv("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+    "aria-label": `Cumulative tokens over ${maxStep} steps, ${fmt(maxTok)} in total` + (r.stopped ? `, would stop at step ${r.stop_step}` : "")});
+
+  for (let k = 0; k <= 4; k++) {
+    const v = niceMax * k / 4;
+    svg.append(sv("line", {class: k ? "grid" : "axis", x1: m.l, x2: W - m.r, y1: y(v), y2: y(v)}));
+    svg.append(sv("text", {x: m.l - 8, y: y(v) + 4, "text-anchor": "end", text: compact(v)}));
+  }
+  const every = Math.max(1, Math.ceil(maxStep / 10));
+  for (let s = 0; s <= maxStep; s += every) svg.append(sv("text", {x: x(s), y: H - m.b + 18, "text-anchor": "middle", text: String(s)}));
+  svg.append(sv("text", {x: W - m.r, y: H - 4, "text-anchor": "end", text: "step"}));
+
+  const stopAt = r.stopped ? r.steps_with : Infinity;
+  const before = pts.filter((p) => p.step <= stopAt), after = pts.filter((p) => p.step >= stopAt);
+  const path = (ps) => ps.map((p, i) => (i ? "L" : "M") + x(p.step).toFixed(1) + " " + y(p.tok).toFixed(1)).join(" ");
+  if (before.length > 1) {
+    svg.append(sv("path", {class: "area", d: path(before) + ` L${x(before.at(-1).step)} ${y(0)} L${x(0)} ${y(0)} Z`}));
+    svg.append(sv("path", {class: "line", d: path(before)}));
+  }
+  if (r.stopped && after.length > 1) svg.append(sv("path", {class: "line after", d: path(after)}));
+
+  for (const s of warnSteps) {
+    const p = pts.find((q) => q.step === s) || pts.find((q) => q.step === s - 1);
+    if (p && p.step <= stopAt) svg.append(sv("circle", {class: "warn", cx: x(p.step), cy: y(p.tok), r: 5}));
+  }
+  if (r.stopped) {
+    const sx = x(r.steps_with), syv = y(r.tokens_with);
+    svg.append(sv("line", {class: "stop", x1: sx, x2: sx, y1: m.t - 6, y2: H - m.b}));
+    svg.append(sv("circle", {class: "stopdot", cx: sx, cy: syv, r: 6}));
+    const right = sx < W * 0.6;
+    svg.append(sv("text", {class: "stoplabel", x: sx + (right ? 8 : -8), y: m.t + 4, "text-anchor": right ? "start" : "end",
+      text: "Stop · " + mech(r.mechanism)}));
+  }
+
+  // hover: crosshair snaps to the nearest step
+  const cross = sv("line", {class: "cross", y1: m.t, y2: H - m.b, visibility: "hidden"});
+  svg.append(cross);
+  const hit = sv("rect", {class: "hit", x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b});
+  hit.addEventListener("pointermove", (e) => {
+    const box = svg.getBoundingClientRect();
+    const px = (e.clientX - box.left) * (W / box.width);
+    const s = Math.round((px - m.l) / (W - m.l - m.r) * maxStep);
+    const p = pts.reduce((a, b) => Math.abs(b.step - s) < Math.abs(a.step - s) ? b : a);
+    cross.setAttribute("x1", x(p.step)); cross.setAttribute("x2", x(p.step)); cross.setAttribute("visibility", "visible");
+    const nodes = [el("b", {text: fmt(p.tok) + " tokens"}), document.createTextNode(" by the end of step " + p.step)];
+    if (r.stopped && p.step > r.steps_with) nodes.push(el("div", {class: "muted", text: "after the stop: would not have been spent"}));
+    if (warnSteps.includes(p.step)) nodes.push(el("div", {}, el("span", {class: "dot warning"}), " a warning at this step"));
+    showTip(e, nodes);
+  });
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(); });
+  svg.append(hit);
+
+  const legend = el("div", {class: "legend"},
+    el("span", {}, el("i", {class: "swatch-line"}), "spent"),
+    r.stopped ? el("span", {}, el("i", {class: "swatch-dash"}), "after the stop") : null,
+    r.stopped ? el("span", {}, el("span", {class: "dot critical"}), "would stop") : null,
+    warnSteps.length ? el("span", {}, el("span", {class: "dot warning"}), "warning") : null);
+  return el("div", {}, svg, legend);
+}
+function nice(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const k of [1, 2, 2.5, 5, 10]) if (k * p >= v) return k * p;
+  return 10 * p;
+}
+function compact(v) {
+  if (v >= 1e6) return (v / 1e6).toFixed(v % 1e6 ? 1 : 0) + "M";
+  if (v >= 1e3) return (v / 1e3).toFixed(v % 1e3 ? 1 : 0) + "k";
+  return String(Math.round(v));
+}
+
+// ---------------------------------------------------------------- export
+let lastYaml = "";
+$("export").onclick = async () => {
+  try {
+    const res = await api("/api/export", {config: normalisedCfg()});
+    lastYaml = res.yaml;
+    $("yamlText").textContent = lastYaml;
+    $("exportDlg").showModal();
+  } catch (e) {
+    if (e.status === 422) { S.problems = e.data.problems; renderProblems(); toast("Fix the problems first"); }
+    else toast("Error: " + e.message);
+  }
+};
+$("dlgClose").onclick = () => $("exportDlg").close();
+$("saveYaml").onclick = () => {
+  const a = el("a", {href: URL.createObjectURL(new Blob([lastYaml], {type: "text/yaml"})), download: "stoploss.yaml"});
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$("copyYaml").onclick = async () => {
+  try { await navigator.clipboard.writeText(lastYaml); toast("Copied"); } catch (e) { toast("Copy failed; select the text instead"); }
+};
+$("reset").onclick = () => { S.cfg = clone(S.fileCfg); buildControls(); changed(); };
+$("reload").onclick = async () => {
+  try { S.meta = await api("/api/reload", {}); setHeader(); buildControls(); await recompute(); S.base = await api("/api/replay", {config: S.fileCfg}); render(); toast("Logs reloaded"); }
+  catch (e) { toast("Error: " + e.message); }
+};
+
+function setHeader() {
+  const m = S.meta;
+  $("src").textContent = fmt(m.runs) + " runs · " + m.logs.join(", ") + (m.config_path ? " · config " + m.config_path : " · default config");
+}
+
+// ---------------------------------------------------------------- start
+(async function start() {
+  try {
+    S.meta = await api("/api/meta");
+  } catch (e) {
+    $("src").textContent = "Cannot reach the agent-stoploss server.";
+    return;
+  }
+  S.fileCfg = clone(S.meta.config);
+  S.cfg = clone(S.meta.config);
+  setHeader();
+  buildControls();
+  S.base = await api("/api/replay", {config: S.fileCfg});
+  S.report = S.base;
+  buildControls();
+  render();
+})();
+</script>
+</body>
+</html>

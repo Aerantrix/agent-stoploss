@@ -1,0 +1,39 @@
+# agent-stoploss config. Every key is optional; these are the defaults.
+# Check a config before deploying it:  agent-stoploss check-config stoploss.yaml
+
+mode: shadow                  # shadow: record only. enforce: warn the agent, stop the run.
+
+run_budget:                   # a ceiling for one run; off by default
+  max_tokens: null            # `agent-stoploss replay` suggests a value from your runs
+  max_cost_usd: null
+  warn_at: 0.8                # warn at this share of the ceiling
+
+loop_detector:
+  threshold: 3                # the same call, or the same result, this many times
+  result_volatile_fields: [timestamp, request_id, trace_id]
+
+circuit_breaker:
+  window: 5                   # the last N calls to one tool...
+  max_failures: 4             # ...with this many failures pause calls to it
+  cooldown_seconds: 60
+
+error_classifier:
+  terminal_statuses: [400, 401, 403, 404, 405, 410, 422]   # retrying cannot help
+  transient_statuses: [408, 425, 429, 500, 502, 503, 504]
+  terminal_exceptions: []     # exception class names, e.g. [AuthenticationError]
+
+tools: {}                     # per-tool exceptions, for example:
+#  job_status: {loop_detector: off}          # polls the same status on purpose
+#  search: {loop_detector: {threshold: 5}}
+
+notice: "agent-stoploss: {reason}."   # what the agent is told on a warning (enforce only)
+
+log:
+  dir: ./stoploss_logs        # null: no journal
+  raw_text: false             # true: also keep raw arguments and results
+
+prices: {}                    # USD per million tokens; overrides the built-in table
+#  my-model: {input: 1.0, output: 4.0, cache_read: 0.1}
+strict_pricing: false         # true: a model with no known price stops the run
+
+minimum_steps: 3              # replay: spend up to this step counts as the task's minimum

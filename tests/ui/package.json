@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "description": "jsdom check of the agent-stoploss dashboard",
+  "devDependencies": { "jsdom": "24.1.3" }
+}
