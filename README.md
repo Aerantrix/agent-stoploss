@@ -2,6 +2,10 @@
 
 **Stop AI agents from burning tokens on broken tools.**
 
+Based on the [Agent Fuel study](https://github.com/Aerantrix/Agent-Fuel): 660
+recorded agent runs under injected tool failures, with the controller, the run
+records and the analysis that this library's defaults come from.
+
 An agent calls an API, the key has expired, and the agent tries again. And
 again, sixty times, each attempt resending the whole history of failures. A
 retry loop like this turns a task worth a few hundred tokens into a runaway
@@ -201,7 +205,8 @@ a `prices:` entry, or their cost is counted as $0 with a warning;
 
 ## Based on the Agent Fuel study
 
-The mechanisms and defaults come from the Agent Fuel study (CSIT305, University
+The mechanisms and defaults come from the
+[Agent Fuel study](https://github.com/Aerantrix/Agent-Fuel) (CSIT305, University
 of Wollongong in Dubai, 2026): 660 runs of two small models, Qwen 2.5 7B and
 Claude Haiku 5.5, against a stub analytics service in nine scenarios (six
 failures of the service, three healthy tasks), under thirteen system prompts,

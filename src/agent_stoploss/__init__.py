@@ -1,6 +1,6 @@
 """agent-stoploss: stop AI agents from burning tokens on broken tools."""
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 from .config import Config, ConfigError  # noqa: E402
 from .engine import Decision, Verdict  # noqa: E402
